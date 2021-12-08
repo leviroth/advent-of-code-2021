@@ -1,0 +1,6 @@
+(library
+ (name advent_of_code_2021)
+ (libraries angstrom-unix core_kernel)
+ (preprocess
+  (pps ppx_jane))
+ (inline_tests))
