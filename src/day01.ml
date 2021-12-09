@@ -4,24 +4,8 @@ open! Import
 module Common = struct
   module Input = Input.Int_list
   module Output = Int
-end
 
-module Part_01 = struct
-  include Common
-
-  let solve numbers =
-    List.fold numbers ~init:(0, None) ~f:(fun (sum, prev) (current : int) ->
-        match prev with
-        | None -> sum, Some current
-        | Some prev ->
-          (match prev < current with
-          | true -> sum + 1, Some current
-          | false -> sum, Some current))
-    |> fst
-  ;;
-
-  let%expect_test _ =
-    let test_case = Input.of_string {|199
+  let test_case = Input.of_string {|199
 200
 208
 210
@@ -30,10 +14,52 @@ module Part_01 = struct
 240
 269
 260
-263|} in
+263|}
+
+  let sliding_windows l lengths =
+    let last_window, windows =
+      List.fold_map l ~init:Fqueue.empty ~f:(fun queue v ->
+          match equal lengths (Fqueue.length queue) with
+          | false -> Fqueue.enqueue queue v, None
+          | true ->
+            let window = Fqueue.to_list queue in
+            let queue = Fqueue.drop_exn queue in
+            let queue = Fqueue.enqueue queue v in
+            queue, Some window)
+    in
+    List.filter_opt windows @ [ Fqueue.to_list last_window ]
+  ;;
+end
+
+module Part_01 = struct
+  include Common
+
+  let solve numbers =
+    sliding_windows numbers 2
+    |> List.count ~f:(function
+           | a :: b :: _ -> a < b
+           | _ -> assert false)
+  ;;
+
+  let%expect_test _ =
     print_s [%sexp (solve test_case : int)];
     [%expect {| 7 |}]
   ;;
 end
 
-let parts : (module Solution.Part) list = [ (module Part_01) ]
+module Part_02 = struct
+  include Common
+
+  let solve numbers =
+    sliding_windows numbers 3
+    |> List.map ~f:(List.sum (module Int) ~f:Fn.id)
+    |> Part_01.solve
+  ;;
+
+  let%expect_test _ =
+    print_s [%sexp (solve test_case : int)];
+    [%expect {| 5 |}]
+  ;;
+end
+
+let parts : (module Solution.Part) list = [ (module Part_01); (module Part_02) ]
