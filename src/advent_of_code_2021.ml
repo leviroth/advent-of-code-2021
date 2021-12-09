@@ -1,7 +1,7 @@
 open! Core_kernel
 open! Import
 
-let days = [ Day01.parts ]
+let days = [ Day01.parts; Day02.parts ]
 
 let command =
   Command.group
