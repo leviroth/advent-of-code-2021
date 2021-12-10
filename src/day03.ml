@@ -20,6 +20,30 @@ module Common = struct
 00010
 01010|}
   ;;
+
+  let int_of_bit_string bit_string =
+    String.fold bit_string ~init:0 ~f:(fun acc c ->
+        (acc lsl 1)
+        +
+        match c with
+        | '0' -> 0
+        | '1' -> 1
+        | _ -> assert false)
+  ;;
+
+  let%expect_test _ =
+    let test s = printf "%d\n" (int_of_bit_string s) in
+    test "0";
+    [%expect {| 0 |}];
+    test "1";
+    [%expect {| 1 |}];
+    test "10";
+    [%expect {| 2 |}];
+    test "011";
+    [%expect {| 3 |}];
+    test "1011";
+    [%expect {| 11 |}]
+  ;;
 end
 
 module Part_01 = struct
@@ -57,4 +81,57 @@ module Part_01 = struct
   ;;
 end
 
-let parts : (module Solution.Part) list = [ (module Part_01) ]
+module Part_02 = struct
+  include Common
+
+  let filter_to_one_elt l ~filter =
+    let rec aux l ~position =
+      match filter l ~position with
+      | [ x ] -> x
+      | [] -> assert false
+      | _ :: _ as l -> aux l ~position:(position + 1)
+    in
+    aux l ~position:0
+  ;;
+
+  let filter l ~position ~rule =
+    let bits = List.map l ~f:(fun s -> String.get s position) in
+    let rule = unstage (rule bits) in
+    List.filter l ~f:(fun s -> rule (String.get s position))
+  ;;
+
+  let oxygen_generator_rule bits =
+    let ones = List.count bits ~f:(Char.equal '1') in
+    let zeros = List.count bits ~f:(Char.equal '0') in
+    stage
+      (match ones >= zeros with
+      | true -> Char.equal '1'
+      | false -> Char.equal '0')
+  ;;
+
+  let co2_scrubber_rule bits =
+    let ones = List.count bits ~f:(Char.equal '1') in
+    let zeros = List.count bits ~f:(Char.equal '0') in
+    stage
+      (match zeros <= ones with
+      | true -> Char.equal '0'
+      | false -> Char.equal '1')
+  ;;
+
+  let solve numbers =
+    let oxygen_generator =
+      filter_to_one_elt numbers ~filter:(filter ~rule:oxygen_generator_rule)
+    in
+    let co2_scrubber =
+      filter_to_one_elt numbers ~filter:(filter ~rule:co2_scrubber_rule)
+    in
+    int_of_bit_string oxygen_generator * int_of_bit_string co2_scrubber
+  ;;
+
+  let%expect_test _ =
+    print_s [%sexp (solve test_case : int)];
+    [%expect {| 230 |}]
+  ;;
+end
+
+let parts : (module Solution.Part) list = [ (module Part_01); (module Part_02) ]
