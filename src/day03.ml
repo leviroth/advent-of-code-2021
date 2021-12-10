@@ -52,24 +52,23 @@ module Part_01 = struct
   let solve numbers =
     let string_length = String.length (List.hd_exn numbers) in
     let list_length = List.length numbers in
-    let gamma_for_positon position =
+    let gamma_for_position position =
       let zeros =
         List.count numbers ~f:(fun s -> Char.equal '0' (String.get s position))
       in
       let ones = list_length - zeros in
       match zeros > ones with
-      | true -> 0
-      | false -> 1
+      | true -> '0'
+      | false -> '1'
     in
     let gamma =
       List.range 0 string_length
-      |> List.fold ~init:0 ~f:(fun acc position ->
-             (acc lsl 1) + gamma_for_positon position)
+      |> List.map ~f:gamma_for_position
+      |> String.of_char_list
+      |> int_of_bit_string
     in
     let epsilon =
-      let mask =
-        List.range 0 string_length |> List.fold ~init:0 ~f:(fun acc _ -> (acc lsl 1) + 1)
-      in
+      let mask = (1 lsl string_length) - 1 in
       lnot gamma land mask
     in
     gamma * epsilon
@@ -100,32 +99,30 @@ module Part_02 = struct
     List.filter l ~f:(fun s -> rule (String.get s position))
   ;;
 
-  let oxygen_generator_rule bits =
+  let rule_of_counts bits ~expected_char =
     let ones = List.count bits ~f:(Char.equal '1') in
     let zeros = List.count bits ~f:(Char.equal '0') in
-    stage
-      (match ones >= zeros with
-      | true -> Char.equal '1'
-      | false -> Char.equal '0')
+    let expected_char = expected_char ~ones ~zeros in
+    stage (Char.equal expected_char)
   ;;
 
-  let co2_scrubber_rule bits =
-    let ones = List.count bits ~f:(Char.equal '1') in
-    let zeros = List.count bits ~f:(Char.equal '0') in
-    stage
-      (match zeros <= ones with
-      | true -> Char.equal '0'
-      | false -> Char.equal '1')
+  let oxygen_generator_rule =
+    rule_of_counts ~expected_char:(fun ~ones ~zeros ->
+        match ones >= zeros with
+        | true -> '1'
+        | false -> '0')
+  ;;
+
+  let co2_scrubber_rule =
+    rule_of_counts ~expected_char:(fun ~ones ~zeros ->
+        match zeros <= ones with
+        | true -> '0'
+        | false -> '1')
   ;;
 
   let solve numbers =
-    let oxygen_generator =
-      filter_to_one_elt numbers ~filter:(filter ~rule:oxygen_generator_rule)
-    in
-    let co2_scrubber =
-      filter_to_one_elt numbers ~filter:(filter ~rule:co2_scrubber_rule)
-    in
-    int_of_bit_string oxygen_generator * int_of_bit_string co2_scrubber
+    List.fold [ oxygen_generator_rule; co2_scrubber_rule ] ~init:1 ~f:(fun acc rule ->
+        acc * int_of_bit_string (filter_to_one_elt numbers ~filter:(filter ~rule)))
   ;;
 
   let%expect_test _ =
