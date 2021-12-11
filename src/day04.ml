@@ -105,10 +105,6 @@ end
 module Common = struct
   module Input = Input.Make_parseable (Game)
   module Output = Int
-end
-
-module Part_01 = struct
-  include Common
 
   let score_game board ~last_drawn_number ~drawn_numbers =
     let all_numbers =
@@ -118,6 +114,10 @@ module Part_01 = struct
     let total = List.sum (module Int) (Set.to_list filtered_numbers) ~f:Fn.id in
     last_drawn_number * total
   ;;
+end
+
+module Part_01 = struct
+  include Common
 
   let solve ({ numbers; boards } : Input.t) =
     List.fold_until
@@ -159,4 +159,57 @@ module Part_01 = struct
   ;;
 end
 
-let parts : (module Solution.Part) list = [ (module Part_01) ]
+module Part_02 = struct
+  include Common
+
+  let solve ({ numbers; boards } : Input.t) =
+    let board, drawn_numbers, last_drawn_number =
+      List.fold
+        numbers
+        ~init:([], boards, None)
+        ~f:(fun (drawn_numbers, unsolved_boards, last_win_if_unique) number ->
+          let drawn_numbers = number :: drawn_numbers in
+          let solved_boards, unsolved_boards =
+            List.partition_tf unsolved_boards ~f:(Board.has_win ~drawn_numbers)
+          in
+          let last_win_if_unique =
+            match solved_boards with
+            | [ board ] -> Some (board, drawn_numbers, number)
+            | [] | _ :: _ -> last_win_if_unique
+          in
+          drawn_numbers, unsolved_boards, last_win_if_unique)
+      |> Tuple3.get3
+      |> Option.value_exn
+    in
+    score_game board ~drawn_numbers ~last_drawn_number
+  ;;
+
+  let%expect_test _ =
+    let test_case =
+      Input.of_string
+        {|7,4,9,5,11,17,23,2,0,14,21,24,10,16,13,6,15,25,12,22,18,20,8,19,3,26,1
+
+22 13 17 11  0
+ 8  2 23  4 24
+21  9 14 16  7
+ 6 10  3 18  5
+ 1 12 20 15 19
+
+ 3 15  0  2 22
+ 9 18 13 17  5
+19  8  7 25 23
+20 11 10 24  4
+14 21 16 12  6
+
+14 21 17 24  4
+10 16 15  9 19
+18  8 23 26 20
+22 11 13  6  5
+ 2  0 12  3  7|}
+    in
+    printf "%d\n" (solve test_case);
+    [%expect {| 1924 |}]
+  ;;
+end
+
+let parts : (module Solution.Part) list = [ (module Part_01); (module Part_02) ]
