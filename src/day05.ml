@@ -20,9 +20,9 @@ module Line = struct
   let%expect_test _ =
     let test a b = print_s [%sexp (covered_points (a, b) : (int * int) list)] in
     test (1, 1) (1, 3);
-    [%expect{| ((1 1) (1 2) (1 3)) |}];
+    [%expect {| ((1 1) (1 2) (1 3)) |}];
     test (9, 7) (7, 7);
-    [%expect{| ((9 7) (8 7) (7 7)) |}]
+    [%expect {| ((9 7) (8 7) (7 7)) |}]
   ;;
 
   let parser =
@@ -35,14 +35,9 @@ end
 module Common = struct
   module Input = Input.Make_parseable_many (Line)
   module Output = Int
-end
 
-module Part_01 = struct
-  include Common
-
-  let solve (lines : Input.t) =
-    List.filter lines ~f:Line.is_horizontal_or_vertical
-    |> List.concat_map ~f:Line.covered_points
+  let solve_filtered_lines lines =
+    List.concat_map lines ~f:Line.covered_points
     |> List.fold
          ~init:Int_pair.Map.empty
          ~f:
@@ -50,6 +45,14 @@ module Part_01 = struct
                | None -> 1
                | Some n -> n + 1))
     |> Map.count ~f:(fun n -> n > 1)
+  ;;
+end
+
+module Part_01 = struct
+  include Common
+
+  let solve lines =
+    List.filter lines ~f:Line.is_horizontal_or_vertical |> solve_filtered_lines
   ;;
 
   let%expect_test _ =
@@ -71,4 +74,28 @@ module Part_01 = struct
   ;;
 end
 
-let parts : (module Solution.Part) list = [ (module Part_01) ]
+module Part_02 = struct
+  include Common
+
+  let solve = solve_filtered_lines
+
+  let%expect_test _ =
+    let test_case =
+      Input.of_string
+        {|0,9 -> 5,9
+8,0 -> 0,8
+9,4 -> 3,4
+2,2 -> 2,1
+7,0 -> 7,4
+6,4 -> 2,0
+0,9 -> 2,9
+3,4 -> 1,4
+0,0 -> 8,8
+5,5 -> 8,2|}
+    in
+    printf "%d\n" (solve test_case);
+    [%expect {| 12 |}]
+  ;;
+end
+
+let parts : (module Solution.Part) list = [ (module Part_01); (module Part_02) ]
