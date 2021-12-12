@@ -60,26 +60,25 @@ module Common = struct
     done;
     Array.sum (module Int) t ~f:(Array.count ~f:(fun v -> v > 9))
   ;;
+
+  let one_step t =
+    Array.iter t ~f:(Array.map_inplace ~f:(( + ) 1));
+    let total = count_flashes t in
+    Array.iter
+      t
+      ~f:
+        (Array.map_inplace ~f:(fun v ->
+             match v > 9 with
+             | true -> 0
+             | false -> v));
+    total
+  ;;
 end
 
 module Part_01 = struct
   include Common
 
-  let solve t =
-    let one_step () =
-      Array.iter t ~f:(Array.map_inplace ~f:(( + ) 1));
-      let total = count_flashes t in
-      Array.iter
-        t
-        ~f:
-          (Array.map_inplace ~f:(fun v ->
-               match v > 9 with
-               | true -> 0
-               | false -> v));
-      total
-    in
-    List.sum (module Int) (List.range 0 100) ~f:(fun _ -> one_step ())
-  ;;
+  let solve t = List.sum (module Int) (List.range 0 100) ~f:(fun _ -> one_step t)
 
   let%expect_test _ =
     let test_case =
@@ -100,4 +99,32 @@ module Part_01 = struct
   ;;
 end
 
-let parts : (module Solution.Part) list = [ (module Part_01) ]
+module Part_02 = struct
+  include Common
+
+  let solve t =
+    Sequence.find_exn
+      (Sequence.unfold ~init:1 ~f:(fun v -> Some (v, v + 1)))
+      ~f:(fun _ -> one_step t = 100)
+  ;;
+
+  let%expect_test _ =
+    let test_case =
+      Input.of_string
+        {|5483143223
+2745854711
+5264556173
+6141336146
+6357385478
+4167524645
+2176841721
+6882881134
+4846848554
+5283751526|}
+    in
+    print_s [%sexp (solve test_case : int)];
+    [%expect {| 195 |}]
+  ;;
+end
+
+let parts : (module Solution.Part) list = [ (module Part_01); (module Part_02) ]
