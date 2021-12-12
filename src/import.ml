@@ -10,6 +10,7 @@ module Int_pair = struct
   let scale (a, b) c = c * a, c * b
   let neighbors t directions = List.map directions ~f:(add t)
   let right_vectors = [ 1, 0; 0, 1; -1, 0; 0, -1 ]
+  let diagonal_vectors = [ 1, 1; -1, 1; 1, -1; -1, -1 ]
 
   let print_set set =
     let range coordinates =
