@@ -10,6 +10,7 @@ let days =
   ; Day06.parts
   ; Day07.parts
   ; Day08.parts
+  ; Day09.parts
   ]
 ;;
 
