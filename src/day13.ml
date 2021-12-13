@@ -23,6 +23,18 @@ module Axis = struct
         | 'y' -> Y
         | _ -> assert false)
   ;;
+
+  let select t =
+    match t with
+    | X -> fst
+    | Y -> snd
+  ;;
+
+  let map t =
+    match t with
+    | X -> Tuple2.map_fst
+    | Y -> Tuple2.map_snd
+  ;;
 end
 
 module Fold_instruction = struct
@@ -42,16 +54,8 @@ module Fold_instruction = struct
 
   let apply { position; axis } ~dots =
     let flip_dimension v = (2 * position) - v in
-    let will_move =
-      match axis with
-      | X -> fun (x, _) -> x > position
-      | Y -> fun (_, y) -> y > position
-    in
-    let move_dot =
-      match axis with
-      | X -> fun (x, y) -> flip_dimension x, y
-      | Y -> fun (x, y) -> x, flip_dimension y
-    in
+    let will_move dot = Axis.select axis dot > position in
+    let move_dot dot = Axis.map axis dot ~f:flip_dimension in
     Int_pair.Set.map dots ~f:(fun dot ->
         match will_move dot with
         | false -> dot
