@@ -12,7 +12,7 @@ module Int_pair = struct
   let right_vectors = [ 1, 0; 0, 1; -1, 0; 0, -1 ]
   let diagonal_vectors = [ 1, 1; -1, 1; 1, -1; -1, -1 ]
 
-  let print_set set =
+  let set_to_string set =
     let range coordinates =
       let open Int in
       let max = List.max_elt coordinates ~compare |> Option.value_exn in
@@ -27,16 +27,18 @@ module Int_pair = struct
       let y_coordinates = Set.to_list set |> List.map ~f:snd in
       range y_coordinates
     in
-    List.range ~stride:(-1) ~stop:`inclusive top bottom
+    let buffer = Queue.create () in
+    List.range ~stop:`inclusive bottom top
     |> List.iter ~f:(fun y ->
            List.range ~stop:`inclusive far_left far_right
            |> List.iter ~f:(fun x ->
-                  printf
-                    "%c"
+                  Queue.enqueue
+                    buffer
                     (match Set.mem set (x, y) with
                     | true -> '#'
                     | false -> ' '));
-           printf "\n")
+           Queue.enqueue buffer '\n');
+    String.of_char_list (Queue.to_list buffer)
   ;;
 end
 
