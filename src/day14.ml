@@ -24,11 +24,55 @@ end
 
 module Common = struct
   module Input = Input.Make_parseable (Input')
+  module Output = Int
+
+  let step counts rules =
+    Map.to_alist counts
+    |> List.concat_map ~f:(fun (((a, b) as pair), count) ->
+           match Map.find rules pair with
+           | None -> [ pair, count ]
+           | Some c -> [ (a, c), count; (c, b), count ])
+    |> Char_pair.Map.of_alist_reduce ~f:( + )
+  ;;
+
+  let solve steps input =
+    let template_string = Input'.template_string input in
+    let counts =
+      Sequence.range 0 (String.length template_string - 1)
+      |> Sequence.fold ~init:Char_pair.Map.empty ~f:(fun map index ->
+             let key =
+               String.get template_string index, String.get template_string (index + 1)
+             in
+             Map.update map key ~f:(function
+                 | None -> 1
+                 | Some n -> n + 1))
+    in
+    let rules = input.insertion_rules in
+    let final =
+      Sequence.range 0 steps
+      |> Sequence.fold ~init:counts ~f:(fun counts _ -> step counts rules)
+    in
+    let char_counts =
+      Map.fold final ~init:Char.Map.empty ~f:(fun ~key:(a, b) ~data:count map ->
+          List.fold
+            [ a; b ]
+            ~init:map
+            ~f:
+              (Map.update ~f:(function
+                  | None -> count
+                  | Some n -> n + count)))
+      |> Map.map ~f:(fun x -> (x / 2) + (x % 2))
+      |> Map.data
+    in
+    Option.value_exn (List.max_elt char_counts ~compare)
+    - Option.value_exn (List.min_elt char_counts ~compare)
+  ;;
 end
 
-module Part_01 = struct
+(* My original solution to part 1; superseded by the more efficient solution in
+   [Common]. *)
+module Part_01_original = struct
   include Common
-  module Output = Int
 
   let step ({ polymer_template; insertion_rules } as t : Input.t) =
     let rec aux template acc =
@@ -55,15 +99,26 @@ module Part_01 = struct
           (Map.update ~f:(function
               | None -> 1
               | Some n -> n + 1))
-      |> Map.to_alist
+      |> Map.data
     in
-    let compare = [%compare: _ * int] in
-    snd (Option.value_exn (List.max_elt counts ~compare))
-    - snd (Option.value_exn (List.min_elt counts ~compare))
+    Option.value_exn (List.max_elt counts ~compare)
+    - Option.value_exn (List.min_elt counts ~compare)
   ;;
 end
 
-let parts : (module Solution.Part) list = [ (module Part_01) ]
+module Part_01 = struct
+  include Common
+
+  let solve = solve 10
+end
+
+module Part_02 = struct
+  include Common
+
+  let solve = solve 40
+end
+
+let parts : (module Solution.Part) list = [ (module Part_01); (module Part_02) ]
 
 let%test_module _ =
   (module struct
@@ -103,13 +158,18 @@ CN -> C|}
     ;;
 
     let%expect_test _ =
-      print_s [%sexp (Input'.template_string (Part_01.step test_case) : string)];
+      print_s [%sexp (Input'.template_string (Part_01_original.step test_case) : string)];
       [%expect {| NCNBCHB |}]
     ;;
 
     let%expect_test _ =
       print_s [%sexp (Part_01.solve test_case : int)];
       [%expect {| 1588 |}]
+    ;;
+
+    let%expect_test _ =
+      print_s [%sexp (Part_02.solve test_case : int)];
+      [%expect {| 2188189693529 |}]
     ;;
   end)
 ;;
