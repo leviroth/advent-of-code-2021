@@ -1,6 +1,6 @@
 (library
  (name advent_of_code_2021)
- (libraries angstrom-unix core_kernel)
+ (libraries angstrom-unix core_kernel core_kernel.hash_heap)
  (preprocess
   (pps ppx_jane))
  (inline_tests))
