@@ -35,17 +35,46 @@ module Common = struct
     |> Char_pair.Map.of_alist_reduce ~f:( + )
   ;;
 
+  let increase_count map key ~by =
+    Map.update map key ~f:(function
+        | None -> by
+        | Some n -> n + by)
+  ;;
+
+  (* Every character in the final string, except the first and last ones, is in
+     two different pairs (as the first element of one and the second element of
+     the other). Therefore, we set aside the first and last characters, divide
+     by two, and then add the first and last characters back in. *)
+  let character_counts_of_pair_counts pair_counts ~first_character ~last_character =
+    let with_first_and_last =
+      Map.fold pair_counts ~init:Char.Map.empty ~f:(fun ~key:(a, b) ~data:count map ->
+          List.fold [ a; b ] ~init:map ~f:(increase_count ~by:count))
+    in
+    let without_first_and_last =
+      List.fold
+        [ first_character; last_character ]
+        ~init:with_first_and_last
+        ~f:(increase_count ~by:(-1))
+    in
+    let deduplicated = Map.map without_first_and_last ~f:(fun x -> x / 2) in
+    List.fold
+      [ first_character; last_character ]
+      ~init:deduplicated
+      ~f:(increase_count ~by:1)
+    |> Map.data
+  ;;
+
   let solve steps input =
     let template_string = Input'.template_string input in
+    let first_character = String.get template_string 0 in
+    let last_character = String.get template_string (String.length template_string - 1) in
     let counts =
       Sequence.range 0 (String.length template_string - 1)
       |> Sequence.fold ~init:Char_pair.Map.empty ~f:(fun map index ->
-             let key =
-               String.get template_string index, String.get template_string (index + 1)
-             in
-             Map.update map key ~f:(function
-                 | None -> 1
-                 | Some n -> n + 1))
+             increase_count
+               map
+               (String.get template_string index, String.get template_string (index + 1))
+               ~by:1)
     in
     let rules = input.insertion_rules in
     let final =
@@ -53,16 +82,7 @@ module Common = struct
       |> Sequence.fold ~init:counts ~f:(fun counts _ -> step counts rules)
     in
     let char_counts =
-      Map.fold final ~init:Char.Map.empty ~f:(fun ~key:(a, b) ~data:count map ->
-          List.fold
-            [ a; b ]
-            ~init:map
-            ~f:
-              (Map.update ~f:(function
-                  | None -> count
-                  | Some n -> n + count)))
-      |> Map.map ~f:(fun x -> (x / 2) + (x % 2))
-      |> Map.data
+      character_counts_of_pair_counts final ~first_character ~last_character
     in
     Option.value_exn (List.max_elt char_counts ~compare)
     - Option.value_exn (List.min_elt char_counts ~compare)
