@@ -18,15 +18,38 @@ let reparse (parser : 'a Angstrom.t) (string_parser : string Angstrom.t) : 'a An
       | Error error -> fail error)
 ;;
 
+module Operator = struct
+  type t =
+    | Sum
+    | Product
+    | Minimum
+    | Maximum
+    | Greater
+    | Less
+    | Equal
+  [@@deriving sexp]
+
+  let of_int = function
+    | 0 -> Sum
+    | 1 -> Product
+    | 2 -> Minimum
+    | 3 -> Maximum
+    | 5 -> Greater
+    | 6 -> Less
+    | 7 -> Equal
+    | _ -> assert false
+  ;;
+end
+
 module Type_id = struct
   type t =
     | Number
-    | Operator of int
+    | Operator of Operator.t
   [@@deriving sexp]
 
   let of_int = function
     | 4 -> Number
-    | n -> Operator n
+    | n -> Operator (Operator.of_int n)
   ;;
 
   let parser = parse_bits 3 |> Angstrom.map ~f:of_int
@@ -80,7 +103,7 @@ module Packet_body = struct
   type 'packet t =
     | Number of int
     | Operator of
-        { operator_id : int
+        { operator : Operator.t
         ; packets : 'packet list
         }
   [@@deriving sexp]
@@ -100,9 +123,9 @@ module Packet = struct
             map
               (match type_id with
               | Number -> map Number_body.parser ~f:(fun n -> Packet_body.Number n)
-              | Operator operator_id ->
+              | Operator operator ->
                 Operator_body.parser parser
-                |> map ~f:(fun packets -> Packet_body.Operator { operator_id; packets }))
+                |> map ~f:(fun packets -> Packet_body.Operator { operator; packets }))
               ~f:(fun body -> { version; body })))
     <* many (char '0')
   ;;
@@ -155,11 +178,42 @@ module Part_01 = struct
     +
     match body with
     | Number _ -> 0
-    | Operator { packets; operator_id = _ } -> List.sum (module Int) packets ~f:solve
+    | Operator { packets; operator = _ } -> List.sum (module Int) packets ~f:solve
   ;;
 end
 
-let parts : (module Solution.Part) list = [ (module Part_01) ]
+module Part_02 = struct
+  include Common
+
+  let take_2 l =
+    match l with
+    | [ a; b ] -> a, b
+    | _ -> assert false
+  ;;
+
+  let rec solve ({ version = _; body } : Input.t) =
+    match body with
+    | Number n -> n
+    | Operator { packets; operator } ->
+      let arguments = List.map packets ~f:solve in
+      let predicate ~f =
+        let a, b = take_2 arguments in
+        match f a b with
+        | true -> 1
+        | false -> 0
+      in
+      (match operator with
+      | Sum -> List.fold arguments ~init:0 ~f:( + )
+      | Product -> List.fold arguments ~init:1 ~f:( * )
+      | Minimum -> Option.value_exn (List.min_elt arguments ~compare)
+      | Maximum -> Option.value_exn (List.max_elt arguments ~compare)
+      | Greater -> predicate ~f:( > )
+      | Less -> predicate ~f:( < )
+      | Equal -> predicate ~f:( = ))
+  ;;
+end
+
+let parts : (module Solution.Part) list = [ (module Part_01); (module Part_02) ]
 
 let%test_module _ =
   (module struct
@@ -177,7 +231,7 @@ let%test_module _ =
         {|
         ((version 1)
          (body
-          (Operator (operator_id 6)
+          (Operator (operator Less)
            (packets
             (((version 6) (body (Number 10))) ((version 2) (body (Number 20)))))))) |}];
       test "EE00D40C823060";
@@ -185,7 +239,7 @@ let%test_module _ =
         {|
         ((version 7)
          (body
-          (Operator (operator_id 3)
+          (Operator (operator Maximum)
            (packets
             (((version 2) (body (Number 1))) ((version 4) (body (Number 2)))
              ((version 1) (body (Number 3)))))))) |}]
@@ -204,6 +258,29 @@ let%test_module _ =
       [%expect {| 23 |}];
       test "A0016C880162017C3686B18A3D4780";
       [%expect {| 31 |}]
+    ;;
+
+    let%expect_test "Part 2" =
+      let test input =
+        let test_case = Input.of_string input in
+        print_s [%sexp (Part_02.solve test_case : int)]
+      in
+      test "C200B40A82";
+      [%expect {| 3 |}];
+      test "04005AC33890";
+      [%expect {| 54 |}];
+      test "880086C3E88112";
+      [%expect {| 7 |}];
+      test "CE00C43D881120";
+      [%expect {| 9 |}];
+      test "D8005AC2A8F0";
+      [%expect {| 1 |}];
+      test "F600BC2D8F";
+      [%expect {| 0 |}];
+      test "9C005AC2F8F0";
+      [%expect {| 0 |}];
+      test "9C0141080250320F1802104A08";
+      [%expect {| 1 |}]
     ;;
   end)
 ;;
