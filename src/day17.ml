@@ -34,10 +34,6 @@ end
 module Common = struct
   module Input = Input.Make_parseable (Target)
   module Output = Int
-end
-
-module Part_01 = struct
-  include Common
 
   let step (x, y) (dx, dy) =
     let new_pos = x + dx, y + dy in
@@ -92,17 +88,27 @@ module Part_01 = struct
     loop (0, 0) ~velocity ~max_height:0
   ;;
 
-  let solve (input : Target.t) =
-    Sequence.range 0 (snd input.x_range)
+  let all_max_heights (input : Target.t) =
+    Sequence.range ~stop:`inclusive 0 (snd input.x_range)
     |> Sequence.concat_map ~f:(fun dx ->
-           Sequence.range 0 1000
+           Sequence.range (-1000) 1000
            |> Sequence.filter_map ~f:(fun dy -> simulate input (dx, dy)))
-    |> Sequence.max_elt ~compare
-    |> Option.value_exn
   ;;
 end
 
-let parts : (module Solution.Part) list = [ (module Part_01) ]
+module Part_01 = struct
+  include Common
+
+  let solve input = all_max_heights input |> Sequence.max_elt ~compare |> Option.value_exn
+end
+
+module Part_02 = struct
+  include Common
+
+  let solve input = all_max_heights input |> Sequence.length
+end
+
+let parts : (module Solution.Part) list = [ (module Part_01); (module Part_02) ]
 
 let%test_module _ =
   (module struct
@@ -129,6 +135,11 @@ let%test_module _ =
     let%expect_test _ =
       print_s [%sexp (Part_01.solve test_case : int)];
       [%expect {| 45 |}]
+    ;;
+
+    let%expect_test _ =
+      print_s [%sexp (Part_02.solve test_case : int)];
+      [%expect {| 112 |}]
     ;;
   end)
 ;;
