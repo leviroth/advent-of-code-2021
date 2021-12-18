@@ -23,7 +23,7 @@ module Number = struct
     | Pair (l, r) -> sprintf "[%s,%s]" (to_string l) (to_string r)
   ;;
 
-  let add l r = Pair (l, r)
+  let add' l r = Pair (l, r)
 
   let rec add_value_on_left_side t value =
     match t with
@@ -119,6 +119,8 @@ module Number = struct
     aux t
   ;;
 
+  let add a b = reduce (add' a b)
+
   let rec magnitude t =
     match t with
     | Regular n -> n
@@ -134,13 +136,30 @@ end
 module Part_01 = struct
   include Common
 
-  let solve numbers =
-    Number.magnitude
-      (List.reduce_exn numbers ~f:(fun a b -> Number.reduce (Number.add a b)))
+  let solve numbers = Number.magnitude (List.reduce_exn numbers ~f:Number.add)
+end
+
+module Part_02 = struct
+  include Common
+
+  let all_pairs input =
+    let input_sequence = Sequence.of_list input in
+    let indexed = Sequence.mapi input_sequence ~f:Tuple2.create in
+    Sequence.cartesian_product indexed indexed
+    |> Sequence.filter_map ~f:(fun ((i, a), (i', b)) ->
+           match i = i' with
+           | true -> None
+           | false -> Some (a, b))
+  ;;
+
+  let solve input =
+    Sequence.map (all_pairs input) ~f:(fun (a, b) -> Number.magnitude (Number.add a b))
+    |> Sequence.max_elt ~compare
+    |> Option.value_exn
   ;;
 end
 
-let parts : (module Solution.Part) list = [ (module Part_01) ]
+let parts : (module Solution.Part) list = [ (module Part_01); (module Part_02) ]
 
 let%test_module _ =
   (module struct
@@ -211,10 +230,9 @@ let%test_module _ =
       [%expect {| [[[[0,7],4],[[7,8],[6,0]]],[8,1]] |}]
     ;;
 
-    let%expect_test "Part 1" =
-      let test_case =
-        Input.of_string
-          {|[[[0,[5,8]],[[1,7],[9,6]]],[[4,[1,2]],[[1,4],2]]]
+    let test_case =
+      Input.of_string
+        {|[[[0,[5,8]],[[1,7],[9,6]]],[[4,[1,2]],[[1,4],2]]]
 [[[5,[2,8]],4],[5,[[9,9],0]]]
 [6,[[[6,2],[5,6]],[[7,6],[4,7]]]]
 [[[6,[0,7]],[0,9]],[4,[9,[9,0]]]]
@@ -224,9 +242,16 @@ let%test_module _ =
 [[9,3],[[9,9],[6,[4,9]]]]
 [[2,[[7,7],7]],[[5,8],[[9,3],[0,2]]]]
 [[[[5,2],5],[8,[3,7]]],[[5,[7,5]],[4,4]]]|}
-      in
+    ;;
+
+    let%expect_test "Part 1" =
       print_s [%sexp (Part_01.solve test_case : Part_01.Output.t)];
-      [%expect{| 4140 |}]
+      [%expect {| 4140 |}]
+    ;;
+
+    let%expect_test "Part 2" =
+      print_s [%sexp (Part_02.solve test_case : Part_02.Output.t)];
+      [%expect {| 3993 |}]
     ;;
   end)
 ;;
