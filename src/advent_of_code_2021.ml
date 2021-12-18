@@ -19,6 +19,7 @@ let days =
   ; Day15.parts
   ; Day16.parts
   ; Day17.parts
+  ; Day18.parts
   ]
 ;;
 
