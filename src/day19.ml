@@ -10,11 +10,16 @@ module Int_triple = struct
   include Comparable.Make (T)
   include Hashable.Make (T)
 
+  let zero = 0, 0, 0
   let add (a_1, b_1, c_1) (a_2, b_2, c_2) = a_1 + a_2, b_1 + b_2, c_1 + c_2
   let sub (a_1, b_1, c_1) (a_2, b_2, c_2) = a_1 - a_2, b_1 - b_2, c_1 - c_2
   let rotate_about_z (x, y, z) = y, -x, z
   let rotate_about_x (x, y, z) = x, z, -y
   let rotate_about_y (x, y, z) = z, y, -x
+
+  let manhattan_distance (a_1, b_1, c_1) (a_2, b_2, c_2) =
+    abs (a_1 - a_2) + abs (b_1 - b_2) + abs (c_1 - c_2)
+  ;;
 
   let all_rotations =
     let open List.Let_syntax in
@@ -107,40 +112,58 @@ end
 module Common = struct
   module Input = Input.Make_parseable (Input')
   module Output = Int
-end
-
-module Part_01 = struct
-  include Common
 
   let solve input =
     let graph = construct_graph input in
-    let known_points = Int_triple.Hash_set.create () in
+    let known_beacons = Int_triple.Hash_set.create () in
+    let known_scanners = Int_triple.Hash_set.create () in
     let visited = Int.Hash_set.create () in
     let rec dfs current_index transformation_stack =
       match Hash_set.mem visited current_index with
       | true -> ()
       | false ->
         Hash_set.add visited current_index;
+        let transform_to_root_coordinate_scheme coords =
+          List.fold transformation_stack ~init:coords ~f:(fun coords (rotate_fn, shift) ->
+              Int_triple.add shift (rotate_fn coords))
+        in
         let current_set_in_relative_coordinate_scheme =
           Map.find_exn input current_index
         in
-        let in_root_coordinate_scheme =
-          List.fold
-            transformation_stack
-            ~init:current_set_in_relative_coordinate_scheme
-            ~f:(fun coords (rotate_fn, shift) ->
-              List.map coords ~f:(fun coord -> Int_triple.add shift (rotate_fn coord)))
+        let beacons_in_root_coordinate_scheme =
+          List.map
+            current_set_in_relative_coordinate_scheme
+            ~f:transform_to_root_coordinate_scheme
         in
-        List.iter in_root_coordinate_scheme ~f:(Hash_set.add known_points);
+        Hash_set.add known_scanners (transform_to_root_coordinate_scheme Int_triple.zero);
+        List.iter beacons_in_root_coordinate_scheme ~f:(Hash_set.add known_beacons);
         List.iter (Map.find_exn graph current_index) ~f:(fun (index, transformation) ->
             dfs index (transformation :: transformation_stack))
     in
     dfs 0 [];
-    Hash_set.length known_points
+    known_beacons, known_scanners
   ;;
 end
 
-let parts : (module Solution.Part) list = [ (module Part_01) ]
+module Part_01 = struct
+  include Common
+
+  let solve input = Hash_set.length (fst (solve input))
+end
+
+module Part_02 = struct
+  include Common
+
+  let solve input =
+    let beacons = Hash_set.to_list (snd (solve input)) in
+    List.cartesian_product beacons beacons
+    |> List.map ~f:(Tuple2.uncurry Int_triple.manhattan_distance)
+    |> List.max_elt ~compare
+    |> Option.value_exn
+  ;;
+end
+
+let parts : (module Solution.Part) list = [ (module Part_01); (module Part_02) ]
 
 let%test_module _ =
   (module struct
@@ -365,6 +388,11 @@ let%test_module _ =
     let%expect_test "Part 1" =
       print_s [%sexp (Part_01.solve test_case : int)];
       [%expect {| 79 |}]
+    ;;
+
+    let%expect_test "Part 2" =
+      print_s [%sexp (Part_02.solve test_case : int)];
+      [%expect {| 3621 |}]
     ;;
   end)
 ;;
