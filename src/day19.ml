@@ -13,36 +13,69 @@ module Int_triple = struct
   let zero = 0, 0, 0
   let add (a_1, b_1, c_1) (a_2, b_2, c_2) = a_1 + a_2, b_1 + b_2, c_1 + c_2
   let sub (a_1, b_1, c_1) (a_2, b_2, c_2) = a_1 - a_2, b_1 - b_2, c_1 - c_2
-  let rotate_about_z (x, y, z) = y, -x, z
-  let rotate_about_x (x, y, z) = x, z, -y
-  let rotate_about_y (x, y, z) = z, y, -x
 
   let manhattan_distance (a_1, b_1, c_1) (a_2, b_2, c_2) =
     abs (a_1 - a_2) + abs (b_1 - b_2) + abs (c_1 - c_2)
   ;;
+end
 
-  let all_rotations =
-    let open List.Let_syntax in
-    let range = List.range 0 4 in
-    let%bind rotate_x =
-      let%bind n = range in
-      [ Fn.apply_n_times ~n rotate_about_x ]
+module Rotation : sig
+  type t
+
+  val apply : t -> Int_triple.t -> Int_triple.t
+  val all : t list
+end = struct
+  type t = Int_triple.t * Int_triple.t * Int_triple.t [@@deriving compare]
+
+  let apply
+      ((x_of_x, y_of_x, z_of_x), (x_of_y, y_of_y, z_of_y), (x_of_z, y_of_z, z_of_z))
+      (x, y, z)
+    =
+    ( (x * x_of_x) + (y * x_of_y) + (z * x_of_z)
+    , (x * y_of_x) + (y * y_of_y) + (z * y_of_z)
+    , (x * z_of_x) + (y * z_of_y) + (z * z_of_z) )
+  ;;
+
+  let rotate_about_x = (1, 0, 0), (0, 0, 1), (0, -1, 0)
+  let rotate_about_y = (0, 0, 1), (0, 1, 0), (-1, 0, 0)
+  let rotate_about_z = (0, 1, 0), (-1, 0, 0), (0, 0, 1)
+
+  let all =
+    let basis = (1, 0, 0), (0, 1, 0), (0, 0, 1) in
+    let transformed_bases =
+      let open List.Let_syntax in
+      let range = List.range 0 4 in
+      let%bind rotate_x =
+        let%bind n = range in
+        [ Fn.apply_n_times ~n (apply rotate_about_x) ]
+      in
+      let%bind rotate_y =
+        let%bind n = range in
+        [ Fn.apply_n_times ~n (apply rotate_about_y) ]
+      in
+      let%bind rotate_z =
+        let%bind n = range in
+        [ Fn.apply_n_times ~n (apply rotate_about_z) ]
+      in
+      [ Tuple3.map basis ~f:(fun v -> rotate_x (rotate_y (rotate_z v))) ]
     in
-    let%bind rotate_y =
-      let%bind n = range in
-      [ Fn.apply_n_times ~n rotate_about_y ]
-    in
-    let%bind rotate_z =
-      let%bind n = range in
-      [ Fn.apply_n_times ~n rotate_about_z ]
-    in
-    [ (fun v -> rotate_x (rotate_y (rotate_z v))) ]
+    List.dedup_and_sort transformed_bases ~compare
   ;;
 
   let%expect_test _ =
-    print_s [%sexp (List.length all_rotations : int)];
-    (* TODO: Eliminate redundant rotations. *)
-    [%expect {| 64 |}]
+    print_s [%sexp (List.length all : int)];
+    [%expect {| 24 |}]
+  ;;
+end
+
+module Transformation = struct
+  type t =
+    { rotation : Rotation.t
+    ; shift : Int_triple.t
+    }
+
+  let apply { rotation; shift } coords =
+    Rotation.apply rotation coords |> Int_triple.add shift
   ;;
 end
 
@@ -52,18 +85,18 @@ let possible_shifts as_ bs =
 
 let count_overlap a b = Set.length (Set.inter a b)
 
-let find_rotation_and_shift a b =
+let find_transformation a b =
   let a_set = Int_triple.Set.of_list a in
-  let rotations_and_shifts =
+  let transformations =
     let open List.Let_syntax in
-    let%bind rotation_fn = Int_triple.all_rotations in
-    let rotated = List.map b ~f:rotation_fn in
+    let%bind rotation = Rotation.all in
+    let rotated = List.map b ~f:(Rotation.apply rotation) in
     let%bind shift = possible_shifts a rotated in
-    [ rotation_fn, shift ]
+    [ { Transformation.rotation; shift } ]
   in
-  List.find rotations_and_shifts ~f:(fun (rotation_fn, shift) ->
+  List.find transformations ~f:(fun transformation ->
       let b_as_viewed_from_scanner_a =
-        List.map b ~f:rotation_fn |> List.map ~f:(Int_triple.add shift)
+        List.map b ~f:(Transformation.apply transformation)
       in
       count_overlap a_set (Int_triple.Set.of_list b_as_viewed_from_scanner_a) >= 12)
 ;;
@@ -73,7 +106,7 @@ let construct_graph beacons : (int * _) list Int.Map.t =
   Int.Map.of_alist_multi
     (List.cartesian_product alist alist
     |> List.filter_map ~f:(fun ((i_a, beacons_a), (i_b, beacons_b)) ->
-           Option.map (find_rotation_and_shift beacons_a beacons_b) ~f:(fun v ->
+           Option.map (find_transformation beacons_a beacons_b) ~f:(fun v ->
                i_a, (i_b, v))))
 ;;
 
@@ -124,8 +157,8 @@ module Common = struct
       | false ->
         Hash_set.add visited current_index;
         let transform_to_root_coordinate_scheme coords =
-          List.fold transformation_stack ~init:coords ~f:(fun coords (rotate_fn, shift) ->
-              Int_triple.add shift (rotate_fn coords))
+          List.fold transformation_stack ~init:coords ~f:(fun coords transformation ->
+              Transformation.apply transformation coords)
         in
         let current_set_in_relative_coordinate_scheme =
           Map.find_exn input current_index
@@ -228,9 +261,9 @@ let%test_module _ =
     ;;
 
     let%expect_test _ =
-      let rotation_fn, shift = Option.value_exn (find_rotation_and_shift a b) in
+      let transformation = Option.value_exn (find_transformation a b) in
       let b_as_viewed_from_scanner_a =
-        List.map b ~f:rotation_fn |> List.map ~f:(Int_triple.add shift)
+        List.map b ~f:(Transformation.apply transformation)
       in
       let intersection =
         Set.inter
