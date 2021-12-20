@@ -102,19 +102,27 @@ let get_output algorithm image =
 module Common = struct
   module Input = Input.Make_parseable (Input')
   module Output = Int
+
+  let solve' n ({ algorithm; image } : Input.t) =
+    Fn.apply_n_times ~n (get_output algorithm) image
+  ;;
+
+  let solve n input = Set.length (solve' n input).explicit_pixels
 end
 
 module Part_01 = struct
   include Common
 
-  let solve' ({ algorithm; image } : Input.t) =
-    Fn.apply_n_times ~n:2 (get_output algorithm) image
-  ;;
-
-  let solve input = Set.length (solve' input).explicit_pixels
+  let solve = solve 2
 end
 
-let parts : (module Solution.Part) list = [ (module Part_01) ]
+module Part_02 = struct
+  include Common
+
+  let solve = solve 50
+end
+
+let parts : (module Solution.Part) list = [ (module Part_01); (module Part_02) ]
 
 let%test_module _ =
   (module struct
@@ -137,9 +145,14 @@ let%test_module _ =
 ..###|}
     ;;
 
-    let%expect_test _ =
+    let%expect_test "Part 1" =
       print_s [%sexp (Part_01.solve test_case : int)];
       [%expect {| 35 |}]
+    ;;
+
+    let%expect_test "Part 2" =
+      print_s [%sexp (Part_02.solve test_case : int)];
+      [%expect {| 3351 |}]
     ;;
   end)
 ;;
