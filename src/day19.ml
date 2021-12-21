@@ -68,15 +68,36 @@ end = struct
   ;;
 end
 
-module Transformation = struct
-  type t =
-    { rotation : Rotation.t
-    ; shift : Int_triple.t
-    }
+module Transformation : sig
+  type t
 
-  let apply { rotation; shift } coords =
-    Rotation.apply rotation coords |> Int_triple.add shift
+  val create : rotation:Rotation.t -> shift:Int_triple.t -> t
+  val apply : t -> Int_triple.t -> Int_triple.t
+  val zero : t
+  val combine : t -> t -> t
+end = struct
+  module Single = struct
+    type t =
+      { rotation : Rotation.t
+      ; shift : Int_triple.t
+      }
+
+    let apply { rotation; shift } coords =
+      Rotation.apply rotation coords |> Int_triple.add shift
+    ;;
+  end
+
+  type t = Single.t list
+
+  let create ~rotation ~shift : t = [ { rotation; shift } ]
+
+  let apply ts coords =
+    List.fold ts ~init:coords ~f:(fun coords transformation ->
+        Single.apply transformation coords)
   ;;
+
+  let zero = []
+  let combine = ( @ )
 end
 
 let possible_shifts as_ bs =
@@ -92,7 +113,7 @@ let find_transformation a b =
     let%bind rotation = Rotation.all in
     let rotated = List.map b ~f:(Rotation.apply rotation) in
     let%bind shift = possible_shifts a rotated in
-    [ { Transformation.rotation; shift } ]
+    [ Transformation.create ~rotation ~shift ]
   in
   List.find transformations ~f:(fun transformation ->
       let b_as_viewed_from_scanner_a =
@@ -146,50 +167,50 @@ module Common = struct
   module Input = Input.Make_parseable (Input')
   module Output = Int
 
-  let solve input =
+  let dfs input ~f =
     let graph = construct_graph input in
-    let known_beacons = Int_triple.Hash_set.create () in
-    let known_scanners = Int_triple.Hash_set.create () in
     let visited = Int.Hash_set.create () in
-    let rec dfs current_index transformation_stack =
+    let rec dfs current_index transformation =
       match Hash_set.mem visited current_index with
       | true -> ()
       | false ->
         Hash_set.add visited current_index;
-        let transform_to_root_coordinate_scheme coords =
-          List.fold transformation_stack ~init:coords ~f:(fun coords transformation ->
-              Transformation.apply transformation coords)
-        in
-        let current_set_in_relative_coordinate_scheme =
-          Map.find_exn input current_index
-        in
-        let beacons_in_root_coordinate_scheme =
-          List.map
-            current_set_in_relative_coordinate_scheme
-            ~f:transform_to_root_coordinate_scheme
-        in
-        Hash_set.add known_scanners (transform_to_root_coordinate_scheme Int_triple.zero);
-        List.iter beacons_in_root_coordinate_scheme ~f:(Hash_set.add known_beacons);
-        List.iter (Map.find_exn graph current_index) ~f:(fun (index, transformation) ->
-            dfs index (transformation :: transformation_stack))
+        f ~current_index ~transformation;
+        List.iter (Map.find_exn graph current_index) ~f:(fun (index, transformation') ->
+            dfs index (Transformation.combine transformation' transformation))
     in
-    dfs 0 [];
-    known_beacons, known_scanners
+    dfs 0 Transformation.zero
   ;;
 end
 
 module Part_01 = struct
   include Common
 
-  let solve input = Hash_set.length (fst (solve input))
+  let solve input =
+    let beacons = Int_triple.Hash_set.create () in
+    dfs input ~f:(fun ~current_index ~transformation ->
+        let current_beacons_in_relative_coordinate_scheme =
+          Map.find_exn input current_index
+        in
+        let beacons_in_root_coordinate_scheme =
+          List.map
+            current_beacons_in_relative_coordinate_scheme
+            ~f:(Transformation.apply transformation)
+        in
+        List.iter beacons_in_root_coordinate_scheme ~f:(Hash_set.add beacons));
+    Hash_set.length beacons
+  ;;
 end
 
 module Part_02 = struct
   include Common
 
   let solve input =
-    let beacons = Hash_set.to_list (snd (solve input)) in
-    List.cartesian_product beacons beacons
+    let scanners = Int_triple.Hash_set.create () in
+    dfs input ~f:(fun ~current_index:_ ~transformation ->
+        Hash_set.add scanners (Transformation.apply transformation Int_triple.zero));
+    let scanners = Hash_set.to_list scanners in
+    List.cartesian_product scanners scanners
     |> List.map ~f:(Tuple2.uncurry Int_triple.manhattan_distance)
     |> List.max_elt ~compare
     |> Option.value_exn
